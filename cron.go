@@ -1,13 +1,232 @@
 package main
 
-import "github.com/gin-gonic/gin"
+import (
+	"encoding/json"
+	"fmt"
+
+	"io/ioutil"
+	"log"
+	"net/http"
+	"reflect"
+	"strconv"
+	"time"
+
+	jsoniter "github.com/json-iterator/go"
+	"github.com/kalaGN/gincron/src/common"
+
+	_ "github.com/go-sql-driver/mysql"
+)
 
 func main() {
-	r := gin.Default()
-	r.GET("/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "pong",
-		})
-	})
-	r.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
+	//定义结构
+	type Job struct {
+		Id              int
+		src_config      string
+		operate_content string
+		task_name       string
+		cycle_time      string
+	}
+
+	type Cycletime struct {
+		Cron string `cron`
+		Time string `time`
+	}
+
+	type Srcconfig struct {
+		Url string `url`
+	}
+
+	type Opcontent struct {
+		Type  string      `type`
+		Path  string      `path`
+		Param interface{} `json:"params"`
+	}
+
+	var (
+		job  Job
+		jobs []Job
+	)
+
+	// 获取配置
+
+	for {
+		db, err := common.Getdb("commondb")
+		if err != nil {
+			log.Fatalln("open commondb fail:", err)
+		}
+		rows, err := db.Query("select id, src_config, operate_content, task_name, cycle_time from com_schedule_task_define where is_run=0;")
+		if err != nil {
+			log.Fatalln("open db fail:", err)
+		}
+
+		for rows.Next() {
+			err = rows.Scan(&job.Id, &job.src_config, &job.operate_content, &job.task_name, &job.cycle_time)
+			jobs = append(jobs, job)
+			if err != nil {
+				fmt.Print(err.Error())
+			}
+		}
+		defer rows.Close()
+		//gin.DisableConsoleColor()
+		log.Println("jobs length:", len(jobs))
+
+		for _, v := range jobs {
+			temp := v.cycle_time
+			obj := Cycletime{}
+			srcconfig := Srcconfig{}
+			opcontent := Opcontent{}
+
+			// 程序执行时间
+			err := json.Unmarshal([]byte(temp), &obj)
+			if err != nil {
+				fmt.Println("json error", err.Error())
+			}
+			// url
+			err2 := json.Unmarshal([]byte(v.src_config), &srcconfig)
+			if err2 != nil {
+				fmt.Println("json error", err2.Error())
+			}
+			err3 := json.Unmarshal([]byte(v.operate_content), &opcontent)
+			if err3 != nil {
+				fmt.Println("json error", err3.Error())
+			}
+			fmt.Println("operate_content:", v.operate_content)
+
+			// 获取请求参数
+			param := jsoniter.Get([]byte(v.operate_content), "param")
+			m := JSONToMap(param.ToString())
+			var pmStr = "/?"
+			for key, value := range m {
+				if reflect.TypeOf(value).String() == "float64" {
+					value = Strval(value)
+				}
+				pmStr = pmStr + fmt.Sprintf("%s=%s&", key, value)
+
+			}
+			fmt.Println(srcconfig.Url + opcontent.Path + pmStr)
+
+			// 获取当前时间
+			now := time.Now().Format("2006-01-02 15:04:05")
+
+			// 比较时间
+			t1, err1 := time.Parse("2006-01-02 15:04:05", obj.Time)
+			t2, err2 := time.Parse("2006-01-02 15:04:05", now)
+			if err1 == nil && err2 == nil && t1.Before(t2) {
+				fmt.Println("run task id:", v.Id)
+				//执行请求任务
+				res := requestGet(srcconfig.Url + opcontent.Path + pmStr)
+				fmt.Println("run result :", res)
+				//修改执行结果
+				if err != nil {
+					fmt.Print(err.Error())
+				}
+				updateSql := fmt.Sprintf("update com_schedule_task_define set is_run=1 where id='%d';", v.Id)
+				fmt.Println("sql:", updateSql)
+				/*
+					updb, err := sql.Open("mysql", conn)
+					result, err := updb.Exec(updateSql)
+					if err != nil {
+						log.Println("exec failed:", err, ", sql:", updateSql)
+						return
+					}
+					idAff, err := result.RowsAffected()
+					if err != nil {
+						log.Println("RowsAffected failed:", err)
+						return
+					}
+					log.Println("RowsAffected:", idAff)
+				*/
+			} else {
+				//fmt.Println("time not ")
+			}
+
+		}
+		jobs = jobs[0:0]
+		// 休眠5s
+		time.Sleep(time.Duration(5) * time.Second)
+		fmt.Printf("\n\r")
+
+	}
+}
+
+//**
+//
+func requestGet(url string) string {
+	res, _ := http.Get(url)
+	defer res.Body.Close()
+	body, _ := ioutil.ReadAll(res.Body)
+	return string(body[:])
+}
+
+// json转map函数，通用
+func JSONToMap(str string) map[string]interface{} {
+
+	var tempMap map[string]interface{}
+
+	err := json.Unmarshal([]byte(str), &tempMap)
+
+	if err != nil {
+		panic(err)
+	}
+
+	return tempMap
+}
+
+// Strval 获取变量的字符串值
+// 浮点型 3.0将会转换成字符串3, "3"
+// 非数值或字符类型的变量将会被转换成JSON格式字符串
+func Strval(value interface{}) string {
+	// interface 转 string
+	var key string
+	if value == nil {
+		return key
+	}
+
+	switch value.(type) {
+	case float64:
+		ft := value.(float64)
+		key = strconv.FormatFloat(ft, 'f', -1, 64)
+	case float32:
+		ft := value.(float32)
+		key = strconv.FormatFloat(float64(ft), 'f', -1, 64)
+	case int:
+		it := value.(int)
+		key = strconv.Itoa(it)
+	case uint:
+		it := value.(uint)
+		key = strconv.Itoa(int(it))
+	case int8:
+		it := value.(int8)
+		key = strconv.Itoa(int(it))
+	case uint8:
+		it := value.(uint8)
+		key = strconv.Itoa(int(it))
+	case int16:
+		it := value.(int16)
+		key = strconv.Itoa(int(it))
+	case uint16:
+		it := value.(uint16)
+		key = strconv.Itoa(int(it))
+	case int32:
+		it := value.(int32)
+		key = strconv.Itoa(int(it))
+	case uint32:
+		it := value.(uint32)
+		key = strconv.Itoa(int(it))
+	case int64:
+		it := value.(int64)
+		key = strconv.FormatInt(it, 10)
+	case uint64:
+		it := value.(uint64)
+		key = strconv.FormatUint(it, 10)
+	case string:
+		key = value.(string)
+	case []byte:
+		key = string(value.([]byte))
+	default:
+		newValue, _ := json.Marshal(value)
+		key = string(newValue)
+	}
+
+	return key
 }
