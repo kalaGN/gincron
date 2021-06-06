@@ -123,7 +123,7 @@ func Getdb(secname string) (db *sql.DB, errstr error) {
 	//db, err := sql.Open("mysql", "root:123456qwe@tcp(127.0.0.1:3306)/common?parseTime=true")
 
 	config := Getdbconfig("config.ini", "commondb")
-	fmt.Println(config)
+	//fmt.Println(config)
 	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s", config.username, config.password, config.host, config.port, config.db, config.charset))
 	if err != nil {
 		fmt.Println("\nconnection mysql error")
