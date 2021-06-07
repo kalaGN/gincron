@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"io/ioutil"
 	"log"
@@ -47,16 +48,28 @@ func main() {
 		jobs []Job
 	)
 
+	//日志
+	file := "./" + time.Now().Format("20060102") + ".txt"
+
+	logFile, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0766)
+	if nil != err {
+		panic(err)
+	}
+	loger := log.New(logFile, "", log.Ldate|log.Ltime|log.Lshortfile)
 	// 获取配置
 
 	for {
 		db, err := common.Getdb("commondb")
 		if err != nil {
+
+			loger.Fatal("open commondb fail:", err)
 			log.Fatalln("open commondb fail:", err)
 		}
 		rows, err := db.Query("select id, src_config, operate_content, task_name, cycle_time from com_schedule_task_define where is_run=0;")
 		if err != nil {
-			log.Fatalln("open db fail:", err)
+			log.Fatalln("Query select fail:", err)
+			loger.Fatal("Query select fail:", err)
+
 		}
 
 		for rows.Next() {
@@ -68,9 +81,9 @@ func main() {
 		}
 		defer rows.Close()
 		//gin.DisableConsoleColor()
-		log.Println("jobs length:", len(jobs))
 
 		for _, v := range jobs {
+			loger.Printf("jobs length: %d", len(jobs))
 			temp := v.cycle_time
 			obj := Cycletime{}
 			srcconfig := Srcconfig{}
@@ -79,18 +92,18 @@ func main() {
 			// 程序执行时间
 			err := json.Unmarshal([]byte(temp), &obj)
 			if err != nil {
-				fmt.Println("json error", err.Error())
+				loger.Printf("json error: %s", err.Error())
 			}
 			// url
 			err2 := json.Unmarshal([]byte(v.src_config), &srcconfig)
 			if err2 != nil {
-				fmt.Println("json error", err2.Error())
+				loger.Printf("json error2: %s", err2.Error())
 			}
 			err3 := json.Unmarshal([]byte(v.operate_content), &opcontent)
 			if err3 != nil {
-				fmt.Println("json error", err3.Error())
+				loger.Printf("json error3: %s", err3.Error())
 			}
-			fmt.Println("operate_content:", v.operate_content)
+			loger.Printf("operate_content:%s", v.operate_content)
 
 			// 获取请求参数
 			param := jsoniter.Get([]byte(v.operate_content), "param")
@@ -103,7 +116,7 @@ func main() {
 				pmStr = pmStr + fmt.Sprintf("%s=%s&", key, value)
 
 			}
-			fmt.Println(srcconfig.Url + opcontent.Path + pmStr)
+			loger.Printf("url:%s", srcconfig.Url+opcontent.Path+pmStr)
 
 			// 获取当前时间
 			now := time.Now().Format("2006-01-02 15:04:05")
@@ -112,40 +125,38 @@ func main() {
 			t1, err1 := time.Parse("2006-01-02 15:04:05", obj.Time)
 			t2, err2 := time.Parse("2006-01-02 15:04:05", now)
 			if err1 == nil && err2 == nil && t1.Before(t2) {
-				fmt.Println("run task id:", v.Id)
+				loger.Printf("run task id:%d", v.Id)
 				//执行请求任务
 				res := requestGet(srcconfig.Url + opcontent.Path + pmStr)
-				fmt.Println("run result :", res)
+				loger.Printf("run result :%s", res)
 				//修改执行结果
 				if err != nil {
-					fmt.Print(err.Error())
+					loger.Printf("request error:%s", err.Error())
 				}
 				updateSql := fmt.Sprintf("update com_schedule_task_define set is_run=1 where id='%d';", v.Id)
-				fmt.Println("sql:", updateSql)
-				/*
-					updb, err := sql.Open("mysql", conn)
-					result, err := updb.Exec(updateSql)
-					if err != nil {
-						log.Println("exec failed:", err, ", sql:", updateSql)
-						return
-					}
-					idAff, err := result.RowsAffected()
-					if err != nil {
-						log.Println("RowsAffected failed:", err)
-						return
-					}
-					log.Println("RowsAffected:", idAff)
-				*/
+				loger.Printf("sql:%s", updateSql)
+
+				result, err := db.Exec(updateSql)
+				if err != nil {
+					loger.Printf("exec failed:%s sql:%s", err, updateSql)
+				}
+				idAff, err := result.RowsAffected()
+				if err != nil {
+					loger.Printf("RowsAffected failed:%s", err)
+				}
+				loger.Printf("RowsAffected:%d", idAff)
+
 			} else {
 				//fmt.Println("time not ")
 			}
 
 		}
+		// 清空jobs
 		jobs = jobs[0:0]
 		// 休眠5s
 		time.Sleep(time.Duration(5) * time.Second)
-		fmt.Printf("\n\r")
-
+		//fmt.Printf("\n\r")
+		db.Close()
 	}
 }
 
