@@ -1,2 +1,2 @@
 # gincron
-## for run com schdule
+## for run com schedule
