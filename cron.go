@@ -163,10 +163,21 @@ func main() {
 //**
 //
 func requestGet(url string) string {
-	res, _ := http.Get(url)
-	defer res.Body.Close()
-	body, _ := ioutil.ReadAll(res.Body)
-	return string(body[:])
+	timeout := time.Duration(2 * time.Second)
+	client := http.Client{
+		Timeout: timeout,
+	}
+	res, err := client.Get(url)
+
+	if err != nil {
+		//panic(err)
+		return err.Error()
+	} else {
+		defer res.Body.Close()
+		body, _ := ioutil.ReadAll(res.Body)
+		return string(body[:])
+	}
+
 }
 
 // json转map函数，通用
