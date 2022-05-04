@@ -49,15 +49,14 @@ func main() {
 	)
 
 	//日志
-	file := "./" + time.Now().Format("20060102") + ".txt"
+	file := "./" + time.Now().Format("20060102") + ".log"
 
 	logFile, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0766)
 	if nil != err {
 		panic(err)
 	}
 	loger := log.New(logFile, "", log.Ldate|log.Ltime|log.Lshortfile)
-	// 获取配置
-
+	// 循环执行
 	for {
 		db, err := common.Getdb("commondb")
 		if err != nil {
@@ -114,8 +113,8 @@ func main() {
 					value = Strval(value)
 				}
 				pmStr = pmStr + fmt.Sprintf("%s=%s&", key, value)
-
 			}
+
 			loger.Printf("url:%s", srcconfig.Url+opcontent.Path+pmStr)
 
 			// 获取当前时间
@@ -160,7 +159,6 @@ func main() {
 	}
 }
 
-//**
 //
 func requestGet(url string) string {
 	timeout := time.Duration(2 * time.Second)
@@ -177,10 +175,9 @@ func requestGet(url string) string {
 		body, _ := ioutil.ReadAll(res.Body)
 		return string(body[:])
 	}
-
 }
 
-// json转map函数，通用
+// json转map函数，通用 提交job类任务场景会报错
 func JSONToMap(str string) map[string]interface{} {
 
 	var tempMap map[string]interface{}
@@ -188,7 +185,8 @@ func JSONToMap(str string) map[string]interface{} {
 	err := json.Unmarshal([]byte(str), &tempMap)
 
 	if err != nil {
-		panic(err)
+		return tempMap
+		//panic(err)
 	}
 
 	return tempMap
@@ -249,6 +247,5 @@ func Strval(value interface{}) string {
 		newValue, _ := json.Marshal(value)
 		key = string(newValue)
 	}
-
 	return key
 }
