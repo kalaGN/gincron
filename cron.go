@@ -18,6 +18,21 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
+//版本
+var (
+	BuildTime = ""
+	Version   = ""
+	GoVersion = ""
+)
+
+func init() {
+	if len(os.Args) == 2 && (os.Args[1] == "-v" || os.Args[1] == "-V") {
+		fmt.Println("Version: \t" + Version)
+		fmt.Println("BuildTime: \t" + BuildTime)
+		fmt.Println("GoVersion: \t" + GoVersion)
+	}
+}
+
 func main() {
 	//定义结构
 	type Job struct {
