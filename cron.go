@@ -13,6 +13,7 @@ import (
 	"time"
 
 	jsoniter "github.com/json-iterator/go"
+
 	"github.com/kalaGN/gincron/src/common"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -30,6 +31,7 @@ func init() {
 		fmt.Println("Version: \t" + Version)
 		fmt.Println("BuildTime: \t" + BuildTime)
 		fmt.Println("GoVersion: \t" + GoVersion)
+		os.Exit(0)
 	}
 }
 
